@@ -79,7 +79,7 @@ n = int((t1 - t0) / dt)
 f, g = VE_SDE()
 X_VE = euler_maruyama(f, g, x0, t0, t1, dt)
 
-f, g = VP_SDE()
+f, g = VP_SDE(beta_min=0.1, beta_max=10)
 X_VP = euler_maruyama(f, g, x0, t0, t1, dt)
 
 print(X_VE.shape)

@@ -6,11 +6,23 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, Slider
 
 
-def beta(t, beta_min=0.1, beta_max=20):
-    return beta_min + (beta_max - beta_min) * t
+class NoiseSchedule:
+    def __init__(self, beta_min=0.1, beta_max=20):
+        self.beta_min = beta_min
+        self.beta_max = beta_max
+
+    def beta(self, t):
+        return self.beta_min + (self.beta_max - self.beta_min) * t
+        
+    def alpha(self, t):
+        return torch.exp(-(self.beta_min * t + (self.beta_max-self.beta_min) * t**2 / 2))
+
+
+# def beta(t, beta_min=0.1, beta_max=20):
+#     return beta_min + (beta_max - beta_min) * t
     
-def alpha(t, beta_min=0.1, beta_max=20):
-    return torch.exp(-(beta_min * t + (beta_max-beta_min) * t**2 / 2))
+# def alpha(t, beta_min=0.1, beta_max=20):
+#     return torch.exp(-(beta_min * t + (beta_max-beta_min) * t**2 / 2))
 
 
 # Define the network
@@ -29,7 +41,7 @@ class ScoreNet(nn.Module):
 
 
 
-lim = 3
+lim = 2
 
 
 # Define the grid of points
@@ -39,16 +51,19 @@ x_vecs = torch.from_numpy(np.array([x0, x1]).transpose(1, 2, 0)).float()
 
 print('vecs:', x_vecs.shape)
 
+beta_min, beta_max = 0.1, 10
 
 noise_pred_net = ScoreNet()
 
-noise_pred_net.load_state_dict(torch.load('noise_pred_net.pt'))
+noise_pred_net.load_state_dict(torch.load(f'noise_pred_net_{beta_min}_{beta_max}.pt'))
+
+noise_scheduler = NoiseSchedule(beta_min=beta_min, beta_max=beta_max)
 
 
 n_steps = 1000
 t = torch.linspace(0, 1, n_steps)
 
-alphas = alpha(t)
+alphas = noise_scheduler.alpha(t)
 
 
 # Define the vector field by score function
@@ -63,14 +78,14 @@ fig, ax = plt.subplots(figsize=(10, 10))
 fig.subplots_adjust(left=0.25, bottom=0.25)
 
 
-valinit = 0.01
+valinit = 0.025
 
 # Make a horizontal slider to control the frequency.
 ax_time = fig.add_axes([0.25, 0.1, 0.65, 0.03])
 time_slider = Slider(
     ax=ax_time,
     label='time [t]',
-    valmin=0.01,
+    valmin=0.025,
     valmax=1,
     valinit=valinit,
     color='grey'

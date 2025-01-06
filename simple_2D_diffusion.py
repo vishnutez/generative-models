@@ -23,19 +23,24 @@ class ScoreNet(nn.Module):
         return self.net(torch.cat((t, x_t), -1))
 
 
-def beta(t, beta_min=0.1, beta_max=20):
-    return beta_min + (beta_max - beta_min) * t
-    
-def alpha(t, beta_min=0.1, beta_max=20):
-    return torch.exp(-(beta_min * t + (beta_max-beta_min) * t**2 / 2))
+class NoiseSchedule:
+    def __init__(self, beta_min=0.1, beta_max=20):
+        self.beta_min = beta_min
+        self.beta_max = beta_max
+
+    def beta(self, t):
+        return self.beta_min + (self.beta_max - self.beta_min) * t
+        
+    def alpha(self, t):
+        return torch.exp(-(self.beta_min * t + (self.beta_max-self.beta_min) * t**2 / 2))
 
 
 # train the network
-def train(net, sampler, dt = 0.001, epochs=1000, lr=1e-3, batch_size=128):
+def train(net, sampler, noise_scheduler, dt = 0.001, epochs=1000, lr=1e-3, batch_size=128):
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
     n_steps = int(1/dt)
-    alphas = alpha(torch.linspace(0, 1, n_steps))
+    alphas = noise_scheduler.alpha(torch.linspace(0, 1, n_steps))
     t_steps = torch.linspace(0, 1, n_steps)
 
     for epoch in tqdm(range(epochs)):
@@ -68,25 +73,25 @@ def train(net, sampler, dt = 0.001, epochs=1000, lr=1e-3, batch_size=128):
 
 
 # Running the reverse SDE
-def sample_reverse(score_net, f, g, dt=0.001, n_samples=100):
+def sample_reverse(score_net, noise_scheduler, f, g, dt=0.001, n_samples=100, eps=1e-5):
     n = int(1 / dt)
     t = np.linspace(0, 1, n)
-    alphas = alpha(torch.from_numpy(t)).numpy()
+    alphas = noise_scheduler.alpha(torch.from_numpy(t)).numpy()
     xT = np.random.randn(n_samples, score_net.dim)
     x = np.zeros((n, n_samples, score_net.dim))
     x[n-1] = xT
     for i in range(n - 1, -1, -1):
         z_t = score_net(torch.full((n_samples, 1), t[i]), torch.tensor(x[i]).float()).detach().numpy()
-        score_i = -z_t / np.sqrt((1-alphas[i]) + 1e-3)
+        score_i = -z_t / np.sqrt((1-alphas[i]) + eps)
         x[i - 1] = x[i] - (f(x[i], t[i]) - g(t[i])**2 * score_i) * dt + g(t[i]) * np.sqrt(dt) * np.random.randn(*xT.shape)
     return x
 
 
 # Runing DDPM sampler
-def sample_reverse_DDPM(score_net, dt=0.001, n_samples=100):
+def sample_reverse_DDPM(score_net, noise_scheduler, dt=0.001, n_samples=100):
     n = int(1 / dt)
     t = np.linspace(0, 1, n)
-    alphas = alpha(t)
+    alphas = noise_scheduler.alpha(t)
     xT = np.random.randn(n_samples, score_net.dim)
     x = np.zeros((n, n_samples, score_net.dim))
     x[n-1] = xT
@@ -117,6 +122,27 @@ class MOGSampler:
         return samples
     
 
+# Define the drift and diffusion functions
+def VP_SDE(beta_min=0.1, beta_max=20):
+    def beta(t):  # Choose such that beta(0) = 0 and beta(1) = 1
+        return beta_min + (beta_max - beta_min) * t
+    def f(x, t):
+        return -x * beta(t)/2
+    def g(t):
+        return np.sqrt(beta(t))
+    return f, g
+
+
+def VE_SDE(sigma_min=0.01, sigma_max=7):
+    def sigma(t):
+        return sigma_min * (sigma_max / sigma_min) ** t
+    def sigma_dot(t):
+        return sigma_min * np.log(sigma_max / sigma_min) * (sigma_max / sigma_min) ** t
+    def f(x, t):
+        return 0
+    def g(t):
+        return np.sqrt(2*sigma(t)*sigma_dot(t))
+    return f, g
 
 
 # Generate some data
@@ -142,24 +168,33 @@ n_samples = 1000
 
 x0_true = sampler.sample(n_samples)
 
+
+beta_min, beta_max = 0.1, 10
+noise_scheduler = NoiseSchedule(beta_min=beta_min, beta_max=beta_max)
+
 noise_pred_net = ScoreNet()
 
-# train(noise_pred_net, sampler, dt=dt)
+train(noise_pred_net, sampler, noise_scheduler=noise_scheduler, dt=dt)
 
-# torch.save(noise_pred_net.state_dict(), 'noise_pred_net.pt')
+torch.save(noise_pred_net.state_dict(), f'noise_pred_net_{beta_min}_{beta_max}.pt')
 
-noise_pred_net.load_state_dict(torch.load('noise_pred_net.pt'))
+noise_pred_net.load_state_dict(torch.load(f'noise_pred_net_{beta_min}_{beta_max}.pt'))
 
-x = sample_reverse(noise_pred_net, f=lambda x, t: -x * beta(t)/2, g=lambda t: np.sqrt(beta(t)), dt=dt, n_samples=n_samples)
+f, g = VP_SDE(beta_min=beta_min, beta_max=beta_max)
+
+x = sample_reverse(noise_pred_net, noise_scheduler=noise_scheduler, f=f, g=g, dt=dt, n_samples=n_samples)
 
 x0_fake = x[0]
 
-print("x0_reconstructed:", x0_fake)
+# print("x0_reconstructed:", x0_fake)
 
 fig, ax = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True)
 ax[0].scatter(x0_true[:, 0], x0_true[:, 1], color='k', s=5, marker='o', label='True data')
 ax[1].scatter(x0_fake[:, 0], x0_fake[:, 1], color='lightgrey', s=5, marker='s', label='Reconstructed data')
 ax[0].set_xlim(-3, 3)
 ax[0].set_ylim(-3, 3)
+
+# Common legend at the bottom
+fig.legend(loc='lower center', ncol=2)
 
 plt.show()
