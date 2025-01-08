@@ -8,7 +8,7 @@ This repo is meant to understand SDE processes.
 
 > Run `noise_schedule.ipynb` to understand the effect of discretization in SDE and its relation with DDPM $\alpha_t$. Change `n_steps` to see the deviation.
 
-
+> Run `score_function_heatmap_quiver.py` to plot the slider-based score function learnt by a trained diffusion model
 
 
 Further explanation:
