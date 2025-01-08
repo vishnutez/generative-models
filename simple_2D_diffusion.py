@@ -9,7 +9,7 @@ from math import sqrt
 
 
 # Define the network
-class ScoreNet(nn.Module):
+class Net(nn.Module):
     def __init__(self, dim: int = 2, h: int = 128, n_layers: int = 4):
         super().__init__()
         self.dim = dim
@@ -36,11 +36,12 @@ class NoiseSchedule:
 
 
 # train the network
-def train(net, sampler, noise_scheduler, dt = 0.001, epochs=1000, lr=1e-3, batch_size=128):
+def train(net, sampler, noise_scheduler, dt = 0.001, epochs=3000, lr=1e-3, batch_size=64, eps=1e-5):
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
     n_steps = int(1/dt)
     alphas = noise_scheduler.alpha(torch.linspace(0, 1, n_steps))
+    betas = noise_scheduler.beta(torch.linspace(0, 1, n_steps))
     t_steps = torch.linspace(0, 1, n_steps)
 
     for epoch in tqdm(range(epochs)):
@@ -51,19 +52,22 @@ def train(net, sampler, noise_scheduler, dt = 0.001, epochs=1000, lr=1e-3, batch
         z_t = torch.randn(batch_size, sampler.d)  # noise
         x_t = torch.sqrt(a_t) * x + torch.sqrt(1-a_t) * z_t
 
-        # # Predict score
-        # denoising_score = -z_t / (torch.sqrt(1-a_t)+1e-3) # score = -(x_t - sqrt(a_t) * x) / (1-a_t) = -z_t / sqrt(1-a_t) <-> -pred_noise / sqrt(1-a_t)
-        # pred_score = net(t_steps[t], x_t)
-
-        # Predict noise
-
-        pred_noise = net(t_steps[t], x_t)
+        # # Predict score (x_t -> grad_x log p_t(x))
+        # denoising_score = -z_t / (torch.sqrt(1-a_t)+eps) # score = -(x_t - sqrt(a_t) * x) / (1-a_t) = -z_t / sqrt(1-a_t) <-> -pred_noise / sqrt(1-a_t)
+        
+        pred = net(t_steps[t], x_t)
 
         optimizer.zero_grad()
 
-        # loss = criterion(pred_score, denoising_score) # Predict score
+        scale = 1  # Default no scaling
+
+        # loss = criterion(pred, denoising_score) # Predict score
         
-        loss = criterion(pred_noise, z_t) # Predict noise
+        # scale = torch.sqrt((1-alphas[t])) # Scale when predicting noise
+        loss = criterion(scale*pred, scale*z_t) # Predict noise
+
+        # scale = torch.sqrt(1-alphas[t]) # Scale when predicting x
+        # loss =  criterion(scale*pred, scale*x) # Predict x, and scale the loss
         
         loss.backward()
         optimizer.step()
@@ -73,21 +77,32 @@ def train(net, sampler, noise_scheduler, dt = 0.001, epochs=1000, lr=1e-3, batch
 
 
 # Running the reverse SDE
-def sample_reverse(score_net, noise_scheduler, f, g, dt=0.001, n_samples=100, eps=1e-5):
+def sample_reverse(net, noise_scheduler, f, g, dt=0.001, n_samples=100, eps=1e-5):
     n = int(1 / dt)
     t = np.linspace(0, 1, n)
     alphas = noise_scheduler.alpha(torch.from_numpy(t)).numpy()
-    xT = np.random.randn(n_samples, score_net.dim)
-    x = np.zeros((n, n_samples, score_net.dim))
+    xT = np.random.randn(n_samples, net.dim)
+    x = np.zeros((n, n_samples, net.dim))
     x[n-1] = xT
     for i in range(n - 1, -1, -1):
-        z_t = score_net(torch.full((n_samples, 1), t[i]), torch.tensor(x[i]).float()).detach().numpy()
+
+        # Predict added noise and then convert to score
+        z_t = net(torch.full((n_samples, 1), t[i]), torch.tensor(x[i]).float()).detach().numpy()
         score_i = -z_t / np.sqrt((1-alphas[i]) + eps)
+
+        # # Predict sqrt(a_t) * x and then convert to score
+        # x_hat = net(torch.full((n_samples, 1), t[i]), torch.tensor(x[i]).float()).detach().numpy()
+        # score_i = -(x[i] - sqrt(alphas[i]) * x_hat) / (1-alphas[i] + eps)
+
+        # # Predict score directly
+        # score_i = net(torch.full((n_samples, 1), t[i]), torch.tensor(x[i]).float()).detach().numpy()
+
+
         x[i - 1] = x[i] - (f(x[i], t[i]) - g(t[i])**2 * score_i) * dt + g(t[i]) * np.sqrt(dt) * np.random.randn(*xT.shape)
     return x
 
 
-# Runing DDPM sampler
+# Runing DDPM sampler TODO accurately
 def sample_reverse_DDPM(score_net, noise_scheduler, dt=0.001, n_samples=100):
     n = int(1 / dt)
     t = np.linspace(0, 1, n)
@@ -151,7 +166,7 @@ np.random.seed(0)
 dt = 0.001
 
 means = [np.array([-1, -1]), np.array([1, 1])]
-covs = [np.array([[0.1, -0.05], [-0.05, 0.1]]), np.array([[0.2, 0.1], [0.1, 0.2]])]
+covs = [np.array([[0.1, -0.09], [-0.09, 0.1]]), np.array([[0.2, 0.15], [0.15, 0.2]])]
 weights = [0.7, 0.3]
 
 
@@ -172,17 +187,17 @@ x0_true = sampler.sample(n_samples)
 beta_min, beta_max = 0.1, 10
 noise_scheduler = NoiseSchedule(beta_min=beta_min, beta_max=beta_max)
 
-noise_pred_net = ScoreNet()
+pred_net = Net()
 
-train(noise_pred_net, sampler, noise_scheduler=noise_scheduler, dt=dt)
 
-torch.save(noise_pred_net.state_dict(), f'noise_pred_net_{beta_min}_{beta_max}.pt')
+# train(pred_net, sampler, noise_scheduler=noise_scheduler, dt=dt)
+# torch.save(pred_net.state_dict(), f'noise_pred_net_{beta_min}_{beta_max}.pt')
 
-noise_pred_net.load_state_dict(torch.load(f'noise_pred_net_{beta_min}_{beta_max}.pt'))
+pred_net.load_state_dict(torch.load(f'noise_pred_net_{beta_min}_{beta_max}.pt'))
 
 f, g = VP_SDE(beta_min=beta_min, beta_max=beta_max)
 
-x = sample_reverse(noise_pred_net, noise_scheduler=noise_scheduler, f=f, g=g, dt=dt, n_samples=n_samples)
+x = sample_reverse(net=pred_net, noise_scheduler=noise_scheduler, f=f, g=g, dt=dt, n_samples=n_samples)
 
 x0_fake = x[0]
 
@@ -190,7 +205,7 @@ x0_fake = x[0]
 
 fig, ax = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True)
 ax[0].scatter(x0_true[:, 0], x0_true[:, 1], color='k', s=5, marker='o', label='True data')
-ax[1].scatter(x0_fake[:, 0], x0_fake[:, 1], color='lightgrey', s=5, marker='s', label='Reconstructed data')
+ax[1].scatter(x0_fake[:, 0], x0_fake[:, 1], color='lightgrey', s=5, marker='o', label='Generated data')
 ax[0].set_xlim(-3, 3)
 ax[0].set_ylim(-3, 3)
 
