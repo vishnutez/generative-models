@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("A diffusion model to learn mixture of Gaussian distributions")
 
-    parser.add_argument("--train", action="store_true", help="Train the model")
+    parser.add_argument("--no_train", action="store_false", help="Train the model")
     parser.add_argument("--load_path", type=str, help="Load path for the saved models", default=None)
     parser.add_argument("--save_plot", action="store_true", help="Save the plot")
 
@@ -37,9 +37,10 @@ if __name__ == "__main__":
 
     n_steps = 1000
 
-    if args.train:
+    if args.no_train:
         train(d_net, data_sampler=data_sampler, n_steps=n_steps)
-        torch.save(d_net.state_dict(), f'../trained-models/model.pt')
+        torch.save(d_net.state_dict(), f'trained_models/model.pt')
+        print("Saved model in trained_models directory")
     elif args.load_path is not None:  
         d_net.load_state_dict(torch.load(args.load_path))
     else:
@@ -60,6 +61,8 @@ if __name__ == "__main__":
     # Common legend at the bottom
     fig.legend(loc='lower center', ncol=2)
 
-    plt.savefig("../plots/true_vs_generated.png", bbox_inches="tight", dpi=300)
+    plt.savefig("plots/true_vs_generated.png", bbox_inches="tight", dpi=300)
+    
+    print("Saved plot in plots directory")
 
     plt.show()

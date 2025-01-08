@@ -55,7 +55,7 @@ beta_min, beta_max = 0.1, 10
 
 d_net = DiffusionNet(beta_min=beta_min, beta_max=beta_max)
 
-d_net.load_state_dict(torch.load(f'../trained_models/model.pt'))
+d_net.load_state_dict(torch.load(f'trained_models/model.pt'))
 
 
 n_steps = 1000
