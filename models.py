@@ -23,7 +23,12 @@ class DiffusionNet(Module, VPNoiseSchedule):
         self.eps = eps
     
     def forward(self, t: Tensor, x_t: Tensor) -> Tensor:
-        return self.net(cat((t, x_t), -1))
+        return self.net(cat((t, x_t), -1)) # Used to predict noise in step t
     
     def score(self, t: Tensor, x_t: Tensor) -> Tensor:
-        return - self(t, x_t) / (sqrt(1-self.alpha(t)) + self.eps)  # VP-SDE
+
+        # Relationship between noise and score in step t in VP-SDE:  
+        # VP-SDE: x_t = sqrt(alpha_t) * x_0 + sqrt(1-alpha_t) * z_t -> p_{t|0}(x_t | x_0) = N(x_t | sqrt(alpha_t) * x_0, (1-alpha_t)I)
+        # score_t = -(x_t - sqrt(alpha_t)*x_0) / (1-alpha_t) = -z_t  / (sqrt(1-alpha_t)) ~ -noise_pred_t / (sqrt(1-alpha_t)) 
+        
+        return - self(t, x_t) / (sqrt(1-self.alpha(t)) + self.eps)  
