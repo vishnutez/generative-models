@@ -20,9 +20,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     
-    # Generate some data
-    np.random.seed(0)
-
+    # # Generate some data
+    # np.random.seed(0)
 
     means = [np.array([-1, -1]), np.array([1, 1])]
     covs = [np.array([[0.1, -0.09], [-0.09, 0.1]]), np.array([[0.2, 0.15], [0.15, 0.2]])]
@@ -36,9 +35,10 @@ if __name__ == "__main__":
     d_net = DiffusionNet(beta_min=beta_min, beta_max=beta_max)
 
     n_steps = 1000
+    n_epochs = 2000
 
     if args.no_train:
-        train(d_net, data_sampler=data_sampler, n_steps=n_steps)
+        train(d_net, data_sampler=data_sampler, n_steps=n_steps, n_epochs=n_epochs)
         torch.save(d_net.state_dict(), f'trained_models/model.pt')
         print("Saved model in trained_models directory")
     elif args.load_path is not None:  

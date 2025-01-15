@@ -8,8 +8,8 @@ from tqdm import tqdm
 # Train a diffusion network
 def train(d_net: DiffusionNet, 
           data_sampler: MOGSampler, 
-          n_steps = 0.001, 
-          epochs = 3000, 
+          n_steps = 1000, 
+          n_epochs = 3000, 
           lr = 1e-3, 
           batch_size = 64, eps=1e-5):
     
@@ -22,7 +22,7 @@ def train(d_net: DiffusionNet,
     # Get noise schedules from net
     alphas = d_net.alpha(torch.linspace(0, 1, n_steps))
     
-    for epoch in tqdm(range(epochs)):
+    for epoch in tqdm(range(n_epochs)):
 
         t = torch.randint(n_steps, size=(batch_size, 1))  # sampler t uniform from [0, T]
         x = torch.tensor(data_sampler.sample(batch_size), dtype=torch.float32)  # sample data and convert to tensor

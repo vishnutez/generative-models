@@ -31,4 +31,8 @@ class DiffusionNet(Module, VPNoiseSchedule):
         # VP-SDE: x_t = sqrt(alpha_t) * x_0 + sqrt(1-alpha_t) * z_t -> p_{t|0}(x_t | x_0) = N(x_t | sqrt(alpha_t) * x_0, (1-alpha_t)I)
         # score_t = -(x_t - sqrt(alpha_t)*x_0) / (1-alpha_t) = -z_t  / (sqrt(1-alpha_t)) ~ -noise_pred_t / (sqrt(1-alpha_t)) 
         
-        return - self(t, x_t) / (sqrt(1-self.alpha(t)) + self.eps)  
+        return - self(t, x_t) / (sqrt(1-self.alpha(t)) + self.eps) 
+
+    def pred_x_0(self, t: Tensor, x_t: Tensor) -> Tensor:
+        # x_t = sqrt(alpha_t) * x_0 + sqrt(1-alpha_t) * hat(z_t)
+        return 1 / sqrt(self.alpha(t)) * (x_t - sqrt(1-self.alpha(t)) * self(t, x_t))
