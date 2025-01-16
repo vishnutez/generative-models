@@ -54,7 +54,11 @@ if __name__ == "__main__":
 
     # Observation matrix
 
-    A = np.array([1.0, 0.0])
+    A = np.array([1.0, 1.0])
+
+    # Slope of the line 
+
+
     sigma_y = 1e-2
 
     # Generate measurements from the x0_true samples
@@ -75,19 +79,42 @@ if __name__ == "__main__":
     x0_y_fake = x_y[0]
     x0_fake = x[0]
 
+    
 
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True)
-    ax[0].scatter(x0_y_true[:, 0], x0_y_true[:, 1], color='k', s=5, marker='o', label='True data')
-    ax[1].scatter(x0_y_fake[:, 0], x0_y_fake[:, 1], color='darkred', s=5, marker='o', label=r'Generated conditional data, $A = $' + f'{A}' + r', $\sigma_y = $' + f'{sigma_y}')
-    ax[1].scatter(x0_fake[:, 0], x0_fake[:, 1], color='lightgrey', s=5, marker='o', label='Generated unconditional data')
-    ax[0].set_xlim(-3, 3)
+    # Set the figure size
+    plt.figure(figsize=(10, 10))
 
-    ax[0].set_ylim(-3, 3)
+    
+
+    plt.scatter(x0_y_fake[:, 0], x0_y_fake[:, 1], color='darkred', s=5, marker='o', label=r'Generated conditional data, $A = $' + f'{A}' + r', $\sigma_y = $' + f'{sigma_y}')
+    plt.scatter(x0_fake[:, 0], x0_fake[:, 1], color='steelblue', s=5, marker='o', label='Generated unconditional data', alpha=0.5)
+
+
+    if A[1] == 0:
+
+        plt.axvline(x = y[0] / A[0], color='lightgrey', label=r'$A x = y$')
+
+    else:
+        # Points from lim to lim
+
+        x0_pts = np.linspace(-3, 3, 100)
+
+        # Need A[0] * x0_pts + A[1] * x1_pts = y
+
+        x1_pts = (y - A[0] * x0_pts) / A[1]
+
+        plt.plot(x0_pts, x1_pts, color='lightgrey', label=r'$A x = y$')
+
+    plt.scatter(x0_y_true[:, 0], x0_y_true[:, 1], color='k', s=50, marker='x', label='True data')
+
+
+    plt.xlim(-3, 3)
+    plt.ylim(-3, 3)
 
     # Common legend at the bottom
-    fig.legend(loc='upper center', ncol=2, bbox_to_anchor=(0.5, 0.05))
+    plt.legend()
 
-    plt.savefig(f"plots/true_vs_generated_conditional_A0_{A[0]}_A1_{A[1]}_sigma_y_{sigma_y}.png", bbox_inches="tight", dpi=300)
+    plt.savefig(f"plots/DPS_implementation_true_vs_generated_conditional_A0_{A[0]}_A1_{A[1]}_sigma_y_{sigma_y}.png", bbox_inches="tight", dpi=300)
     
     print("Saved plot in plots directory")
 

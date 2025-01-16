@@ -22,6 +22,10 @@ def sample_reverse(d_net: DiffusionNet,
     return x
 
 
+def r(t: torch.Tensor):
+    return torch.exp(t)
+
+
 def conditional_correction(y: torch.Tensor,
                         d_net: DiffusionNet,
                         x_t: torch.Tensor,
@@ -31,8 +35,18 @@ def conditional_correction(y: torch.Tensor,
                         eps=1e-5):
     
     x_t = x_t.detach().requires_grad_(True)
-    # log_p_y_0 = -1 / (2 * sigma_y**2) * torch.linalg.norm(y - d_net.pred_x_0(t, x_t) @ A)**2  # Approximate likelihood score
-    log_p_y_0 = - 1 / (2 * sigma_y**2) * torch.linalg.norm(y - d_net.pred_x_0(t, x_t) @ A)  # Approximate likelihood score
+
+    # log_p_y_0 = - 1 / (2 * sigma_y**2) * torch.linalg.norm(y - d_net.pred_x_0(t, x_t) @ A)**2  # Approximate likelihood score (DPS theory)
+
+    # log_p_y_0 = - 1e-3 / (2 * sigma_y**2) * torch.linalg.norm(y - d_net.pred_x_0(t, x_t) @ A)**2  # Approximate likelihood score (DPS theory + some scaling)
+
+    log_p_y_0 = - 1 / (2 * sigma_y**2) * torch.linalg.norm(y - d_net.pred_x_0(t, x_t) @ A)  # Approximate likelihood score (DPS implementation)
+
+    # err = y - d_net.pred_x_0(t, x_t) @ A
+
+    # log_p_y_0 = - 1 / (2 * sigma_y**2) * torch.dot(err, )  # Approximate likelihood score (PiGDM theory) (n_samples, 2)
+
+
     grad_x_t = torch.autograd.grad(log_p_y_0, x_t, grad_outputs=torch.ones_like(log_p_y_0))[0]  # Gradient wrt to the likelihood score
     x_t = x_t.detach().requires_grad_(False)
 
